@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BacheAlert · Santa Isabel Tola</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --red:     #E8322F;
+    --red-dk:  #B01E1C;
+    --red-lt:  #FDECEA;
+    --amber:   #F59E0B;
+    --amber-lt:#FEF3C7;
+    --green:   #22C55E;
+    --green-lt:#DCFCE7;
+    --asphalt: #1A1A20;
+    --panel:   #22222C;
+    --surface: #2B2B38;
+    --line:    rgba(255,255,255,0.08);
+    --txt:     #F0EFE9;
+    --txt2:    #9B9A96;
+    --white:   #FFFFFF;
+    --font-mono: 'Space Mono', monospace;
+    --font-sans: 'DM Sans', sans-serif;
+    --radius:  10px;
+  }
+
+  html, body { height: 100%; background: var(--asphalt); }
+
+  /* ── WRAPPER ── */
+  #bache-app {
+    font-family: var(--font-sans);
+    display: flex;
+    flex-direction: column;
+    height: 620px;
+    max-width: 780px;
+    margin: 0 auto;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06);
+    background: var(--asphalt);
+  }
+
+  /* ── TOP BAR ── */
+  #top-bar {
+    background: var(--panel);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+    position: relative;
+  }
+  /* road texture stripe */
+  #top-bar::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      90deg,
+      transparent 0px, transparent 24px,
+      rgba(255,255,255,0.015) 24px, rgba(255,255,255,0.015) 26px
+    );
+    pointer-events: none;
+  }
+
+  .logo {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: var(--txt);
+  }
+  .logo span {
+    color: var(--red);
+  }
+  .logo-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    background: var(--red);
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.4); opacity: 0.6; }
+  }
+
+  #zona-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    background: rgba(232,50,47,0.15);
+    color: #FF7875;
+    padding: 4px 9px;
+    border-radius: 20px;
+    border: 1px solid rgba(232,50,47,0.3);
+    text-transform: uppercase;
+  }
+
+  #top-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  #modo-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 11px;
+    cursor: pointer;
+    color: var(--txt2);
+    transition: all .2s;
+    letter-spacing: 0.3px;
+  }
+  #modo-btn:hover { color: var(--txt); border-color: rgba(255,255,255,0.2); }
+  #modo-btn.activo {
+    background: rgba(34,197,94,0.12);
+    color: var(--green);
+    border-color: rgba(34,197,94,0.35);
+  }
+
+  #btn-reportar {
+    font-family: var(--font-sans);
+    background: var(--red);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    letter-spacing: 0.2px;
+    transition: background .15s, transform .1s;
+    box-shadow: 0 2px 12px rgba(232,50,47,0.4);
+  }
+  #btn-reportar:hover { background: var(--red-dk); }
+  #btn-reportar:active { transform: scale(0.97); }
+
+  /* ── MAP ── */
+  #map-container { flex: 1; position: relative; }
+  #map { width: 100%; height: 100%; }
+
+  /* CartoDB Dark already looks great — no filter needed */
+
+  /* ── BOTTOM PANEL ── */
+  #bottom-panel {
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    padding: 12px 16px;
+    flex-shrink: 0;
+  }
+
+  /* ── ALERT BAR ── */
+  #alerta-bar {
+    display: none;
+    background: rgba(232,50,47,0.12);
+    border: 1px solid rgba(232,50,47,0.35);
+    border-radius: 8px;
+    padding: 9px 12px;
+    margin-bottom: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #FF7875;
+    align-items: center;
+    gap: 8px;
+    animation: slideDown .25s ease;
+  }
+  @keyframes slideDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  .alerta-icon {
+    width: 20px; height: 20px;
+    background: var(--red);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .alerta-icon svg { width: 11px; height: 11px; }
+
+  /* ── FILTERS ── */
+  #filtros {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .filtros-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--txt2);
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+  .filtro-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    cursor: pointer;
+    color: var(--txt2);
+    transition: all .15s;
+    letter-spacing: 0.4px;
+  }
+  .filtro-btn:hover { border-color: rgba(255,255,255,0.2); color: var(--txt); }
+  .filtro-btn[data-sev="alto"].on  { border-color: rgba(232,50,47,0.5);  background: rgba(232,50,47,0.12);  color: #FF7875; }
+  .filtro-btn[data-sev="medio"].on { border-color: rgba(245,158,11,0.5); background: rgba(245,158,11,0.12); color: #FCD34D; }
+  .filtro-btn[data-sev="bajo"].on  { border-color: rgba(34,197,94,0.5);  background: rgba(34,197,94,0.12);  color: #86EFAC; }
+
+  #pos-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--txt2);
+    margin-left: auto;
+    letter-spacing: 0.3px;
+  }
+
+  /* ── STAT CARDS ── */
+  #stats-row {
+    display: flex;
+    gap: 8px;
+  }
+  .stat-card {
+    flex: 1;
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 10px 12px;
+    text-align: center;
+    border: 1px solid var(--line);
+    transition: border-color .2s;
+  }
+  .stat-card:hover { border-color: rgba(255,255,255,0.15); }
+  .stat-num {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--txt);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-card:nth-child(1) .stat-num { color: var(--txt); }
+  .stat-card:nth-child(3) .stat-num { color: #FF7875; }
+  .stat-lbl {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--txt2);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+
+  /* ── POPUP ── */
+  .leaflet-popup-content-wrapper {
+    background: var(--panel) !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5) !important;
+    padding: 0 !important;
+  }
+  .leaflet-popup-content { margin: 0 !important; }
+  .leaflet-popup-tip { background: var(--panel) !important; }
+  .leaflet-popup-close-button { color: var(--txt2) !important; top: 8px !important; right: 10px !important; }
+
+  .bache-popup {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 14px 16px;
+    min-width: 200px;
+    color: var(--txt);
+  }
+  .bp-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--txt2);
+    margin-bottom: 6px;
+  }
+  .bp-street {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--txt);
+    margin-bottom: 6px;
+  }
+  .bp-sev {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    margin-bottom: 6px;
+  }
+  .sev-alto  { background: rgba(232,50,47,0.2);  color: #FF7875; border: 1px solid rgba(232,50,47,0.4); }
+  .sev-medio { background: rgba(245,158,11,0.2); color: #FCD34D; border: 1px solid rgba(245,158,11,0.4); }
+  .sev-bajo  { background: rgba(34,197,94,0.2);  color: #86EFAC; border: 1px solid rgba(34,197,94,0.4); }
+  .bp-desc { font-size: 12px; color: var(--txt2); margin-bottom: 4px; }
+  .bp-meta { font-size: 11px; color: rgba(155,154,150,0.7); font-family: var(--font-mono); letter-spacing: 0.2px; }
+
+  .leaflet-control-attribution { display: none !important; }
+  .leaflet-control-zoom a {
+    background: var(--panel) !important;
+    color: var(--txt) !important;
+    border-color: var(--line) !important;
+  }
+
+  /* ── MODAL ── */
+  #modal-reporte {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    backdrop-filter: blur(4px);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+  }
+  #modal-inner {
+    background: var(--panel);
+    border-radius: 16px;
+    padding: 24px;
+    width: 320px;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+    animation: modalIn .2s ease;
+  }
+  @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: none; } }
+  .modal-title {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--txt);
+    margin-bottom: 16px;
+    letter-spacing: 0.3px;
+  }
+  .modal-label {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--txt2);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 6px;
+  }
+  .modal-input {
+    width: 100%;
+    margin-bottom: 14px;
+    padding: 9px 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--txt);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .modal-input:focus { border-color: rgba(232,50,47,0.5); }
+  .modal-input::placeholder { color: var(--txt2); opacity: 0.6; }
+  .modal-select {
+    width: 100%;
+    margin-bottom: 14px;
+    padding: 9px 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--txt);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+  }
+  .modal-select option { background: var(--panel); }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+  .btn-cancel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    color: var(--txt2);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    transition: color .15s;
+  }
+  .btn-cancel:hover { color: var(--txt); }
+  .btn-send {
+    background: var(--red);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 2px 12px rgba(232,50,47,0.4);
+    transition: background .15s;
+  }
+  .btn-send:hover { background: var(--red-dk); }
+</style>
+
+</head>
+<body>
+
+<h2 style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">
+  Mapa de baches reportados en Santa Isabel Tola, Gustavo A. Madero, CDMX
+</h2>
+
+<div id="bache-app">
+
+  <!-- TOP BAR -->
+  <div id="top-bar">
+    <div class="logo"><span class="logo-dot"></span>Bache<span>Alert</span></div>
+    <div id="zona-badge">Alcaldía GAM · CDMX</div>
+    <div id="top-actions">
+      <button id="modo-btn">Navegación</button>
+      <button id="btn-reportar">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.8" viewBox="0 0 24 24">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Reportar
+      </button>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div id="map-container">
+    <div id="map"></div>
+  </div>
+
+  <!-- BOTTOM PANEL -->
+  <div id="bottom-panel">
+
+    <div id="alerta-bar">
+      <div class="alerta-icon">
+        <svg fill="white" viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 3.5L20.5 19H3.5L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>
+      </div>
+      <span id="alerta-texto">Bache reportado a 80m — Calle Iquique #45</span>
+    </div>
+
+    <div id="filtros">
+      <span class="filtros-label">Filtrar</span>
+      <button class="filtro-btn on" data-sev="alto">● Alto</button>
+      <button class="filtro-btn on" data-sev="medio">● Medio</button>
+      <button class="filtro-btn on" data-sev="bajo">● Bajo</button>
+      <span id="pos-label">Buscando ubicación...</span>
+    </div>
+
+    <div id="stats-row">
+      <div class="stat-card">
+        <div class="stat-num" id="s-total">18</div>
+        <div class="stat-lbl">Activos</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="s-cercano">—</div>
+        <div class="stat-lbl">Más cercano</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="s-zona">Alta</div>
+        <div class="stat-lbl">Zona riesgo</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="modal-reporte">
+  <div id="modal-inner">
+    <div class="modal-title">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:6px;">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Reportar bache
+    </div>
+    <div class="modal-label">Calle</div>
+    <input type="text" id="r-calle" class="modal-input" placeholder="Ej. Calle Iquique #12" />
+    <div class="modal-label">Severidad</div>
+    <select id="r-sev" class="modal-select">
+      <option value="alto">Alto riesgo</option>
+      <option value="medio">Medio</option>
+      <option value="bajo">Bajo</option>
+    </select>
+    <div class="modal-label">Descripción</div>
+    <input type="text" id="r-desc" class="modal-input" placeholder="Descripción breve" />
+    <div class="modal-actions">
+      <button id="btn-cancel-modal" class="btn-cancel">Cancelar</button>
+      <button id="btn-enviar-reporte" class="btn-send">Reportar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CENTER = [19.4850, -99.1135];
+const BOUNDS = [[19.430, -99.160], [19.540, -99.060]]; // Alcaldía GAM completa
+
+const baches = [
+  // Santa Isabel Tola (originales)
+  { id:1,  lat:19.4872, lng:-99.1120, calle:"Calle Iquique #45",             sev:"alto",  desc:"Bache profundo, peligroso para motos",  fecha:"hace 2 días",   reports:12, colonia:"Santa Isabel Tola" },
+  { id:2,  lat:19.4848, lng:-99.1142, calle:"Av. Eduardo Molina #312",       sev:"alto",  desc:"Bache grande en carril derecho",         fecha:"hace 1 día",    reports:20, colonia:"Santa Isabel Tola" },
+  { id:3,  lat:19.4891, lng:-99.1108, calle:"Calle Tecolutla #8",            sev:"medio", desc:"Bache mediano, cuidado con lluvia",      fecha:"hace 3 días",   reports:7,  colonia:"Santa Isabel Tola" },
+  { id:4,  lat:19.4835, lng:-99.1155, calle:"Calle Nautla #22",              sev:"bajo",  desc:"Grieta en asfalto",                     fecha:"hace 5 días",   reports:3,  colonia:"Santa Isabel Tola" },
+  { id:5,  lat:19.4864, lng:-99.1095, calle:"Calle Papantla #17",            sev:"alto",  desc:"Bache enorme, evitar carril",           fecha:"hace 4 horas",  reports:31, colonia:"Santa Isabel Tola" },
+  { id:6,  lat:19.4829, lng:-99.1125, calle:"Calle Tula #89",                sev:"medio", desc:"Bache central en curva",                fecha:"hace 2 días",   reports:9,  colonia:"Santa Isabel Tola" },
+  { id:7,  lat:19.4877, lng:-99.1148, calle:"Calle Perote #56",              sev:"bajo",  desc:"Hundimiento leve",                     fecha:"hace 6 días",   reports:4,  colonia:"Santa Isabel Tola" },
+  { id:8,  lat:19.4858, lng:-99.1167, calle:"Av. 510 #23",                   sev:"alto",  desc:"Bache doble en cruce",                 fecha:"hace 1 día",    reports:18, colonia:"Santa Isabel Tola" },
+  { id:9,  lat:19.4843, lng:-99.1113, calle:"Calle Tlatlaya #11",            sev:"medio", desc:"Bache con agua acumulada",             fecha:"hace 3 días",   reports:11, colonia:"Santa Isabel Tola" },
+  { id:10, lat:19.4820, lng:-99.1140, calle:"Calle Orizaba #67",             sev:"bajo",  desc:"Pequeño hundimiento",                  fecha:"hace 1 semana", reports:2,  colonia:"Santa Isabel Tola" },
+  { id:11, lat:19.4895, lng:-99.1130, calle:"Calle Huauchinango #34",        sev:"alto",  desc:"Bache en semáforo",                    fecha:"hace 5 horas",  reports:22, colonia:"Santa Isabel Tola" },
+  { id:12, lat:19.4866, lng:-99.1175, calle:"Av. 514 #78",                   sev:"medio", desc:"Bache lateral derecho",                fecha:"hace 2 días",   reports:8,  colonia:"Santa Isabel Tola" },
+  { id:13, lat:19.4841, lng:-99.1098, calle:"Calle Tantoyuca #43",           sev:"alto",  desc:"Bache profundo en bajada",             fecha:"hace 12 horas", reports:15, colonia:"Santa Isabel Tola" },
+  { id:14, lat:19.4878, lng:-99.1158, calle:"Calle Chicontepec #9",          sev:"bajo",  desc:"Grieta leve",                         fecha:"hace 4 días",   reports:3,  colonia:"Santa Isabel Tola" },
+  { id:15, lat:19.4855, lng:-99.1105, calle:"Calle Tepetzintla #61",         sev:"medio", desc:"Bache con piedras sueltas",            fecha:"hace 2 días",   reports:6,  colonia:"Santa Isabel Tola" },
+  { id:16, lat:19.4831, lng:-99.1162, calle:"Calle Naranjos #25",            sev:"alto",  desc:"Bache muy profundo",                   fecha:"hace 8 horas",  reports:27, colonia:"Santa Isabel Tola" },
+  { id:17, lat:19.4887, lng:-99.1115, calle:"Calle Tempoal #38",             sev:"medio", desc:"Dos baches seguidos",                 fecha:"hace 3 días",   reports:10, colonia:"Santa Isabel Tola" },
+  { id:18, lat:19.4822, lng:-99.1118, calle:"Calle Poza Rica #14",           sev:"bajo",  desc:"Ondulación en pavimento",             fecha:"hace 1 semana", reports:2,  colonia:"Santa Isabel Tola" },
+  // Lindavista
+  { id:19, lat:19.4960, lng:-99.1310, calle:"Av. Montevideo #145",           sev:"alto",  desc:"Bache en carril central",              fecha:"hace 6 horas",  reports:19, colonia:"Lindavista" },
+  { id:20, lat:19.4945, lng:-99.1280, calle:"Calle Moctezuma #32",           sev:"medio", desc:"Grieta extensa en pavimento",          fecha:"hace 2 días",   reports:8,  colonia:"Lindavista" },
+  { id:21, lat:19.4978, lng:-99.1250, calle:"Av. Insurgentes Norte #850",    sev:"alto",  desc:"Bache profundo junto a coladera",      fecha:"hace 1 día",    reports:34, colonia:"Lindavista" },
+  { id:22, lat:19.4932, lng:-99.1330, calle:"Calle Toronto #18",             sev:"bajo",  desc:"Ondulación en bajada",                 fecha:"hace 4 días",   reports:5,  colonia:"Lindavista" },
+  // Guadalupe Victoria
+  { id:23, lat:19.4780, lng:-99.1200, calle:"Av. Eje 3 Nte. Oceania #210",  sev:"alto",  desc:"Bache doble carril izquierdo",         fecha:"hace 3 horas",  reports:41, colonia:"Guadalupe Victoria" },
+  { id:24, lat:19.4755, lng:-99.1240, calle:"Calle Juan de Dios Peza #7",   sev:"medio", desc:"Bache con bordes filosos",             fecha:"hace 2 días",   reports:13, colonia:"Guadalupe Victoria" },
+  { id:25, lat:19.4768, lng:-99.1180, calle:"Calle Pensador Mexicano #44",  sev:"bajo",  desc:"Hundimiento cerca de banqueta",        fecha:"hace 5 días",   reports:4,  colonia:"Guadalupe Victoria" },
+  // Tepeyac Insurgentes
+  { id:26, lat:19.5050, lng:-99.1200, calle:"Calz. de Guadalupe #890",      sev:"alto",  desc:"Bache enorme frente a iglesia",        fecha:"hace 2 horas",  reports:55, colonia:"Tepeyac Insurgentes" },
+  { id:27, lat:19.5070, lng:-99.1170, calle:"Calle Aztecas #12",             sev:"medio", desc:"Bache en subida, resbaloso",           fecha:"hace 1 día",    reports:9,  colonia:"Tepeyac Insurgentes" },
+  { id:28, lat:19.5035, lng:-99.1230, calle:"Av. 608 #55",                   sev:"bajo",  desc:"Grieta longitudinal",                  fecha:"hace 3 días",   reports:3,  colonia:"Tepeyac Insurgentes" },
+  // Vallejo
+  { id:29, lat:19.4880, lng:-99.1480, calle:"Av. Vallejo #320",              sev:"alto",  desc:"Bache industrial, muy profundo",       fecha:"hace 5 horas",  reports:28, colonia:"Vallejo" },
+  { id:30, lat:19.4850, lng:-99.1510, calle:"Calle Ferrocarril Hidalgo #9", sev:"medio", desc:"Dos baches en cruce de vias",          fecha:"hace 2 días",   reports:11, colonia:"Vallejo" },
+  { id:31, lat:19.4910, lng:-99.1460, calle:"Av. de los 100 Metros #78",    sev:"alto",  desc:"Bache en carretera principal",         fecha:"hace 1 día",    reports:22, colonia:"Vallejo" },
+  { id:32, lat:19.4835, lng:-99.1490, calle:"Calle Amado Nervo #33",        sev:"bajo",  desc:"Pequeña depresion en asfalto",         fecha:"hace 6 días",   reports:2,  colonia:"Vallejo" },
+  // La Raza
+  { id:33, lat:19.4700, lng:-99.1430, calle:"Av. Insurgentes Norte #210",   sev:"alto",  desc:"Bache junto a metro La Raza",          fecha:"hace 7 horas",  reports:47, colonia:"La Raza" },
+  { id:34, lat:19.4720, lng:-99.1400, calle:"Paseo de las Jacarandas #5",   sev:"medio", desc:"Bache en glorieta",                    fecha:"hace 3 días",   reports:14, colonia:"La Raza" },
+  { id:35, lat:19.4688, lng:-99.1450, calle:"Calle Moctezuma #101",         sev:"bajo",  desc:"Grieta superficial",                   fecha:"hace 1 semana", reports:3,  colonia:"La Raza" },
+  // Martin Carrera
+  { id:36, lat:19.4980, lng:-99.1080, calle:"Calz. San Juan de Aragon #560",sev:"alto",  desc:"Bache profundo en avenida principal",  fecha:"hace 4 horas",  reports:33, colonia:"Martin Carrera" },
+  { id:37, lat:19.5010, lng:-99.1050, calle:"Calle Oriente 178 #22",        sev:"medio", desc:"Bache en esquina peligrosa",           fecha:"hace 2 días",   reports:9,  colonia:"Martin Carrera" },
+  { id:38, lat:19.4960, lng:-99.1100, calle:"Calle Norte 79 #14",           sev:"bajo",  desc:"Ondulacion en pavimento viejo",        fecha:"hace 4 días",   reports:4,  colonia:"Martin Carrera" },
+  // San Juan de Aragon
+  { id:39, lat:19.4780, lng:-99.0880, calle:"Av. Gran Canal #234",          sev:"alto",  desc:"Bache con agua estancada",             fecha:"hace 3 horas",  reports:38, colonia:"San Juan de Aragon" },
+  { id:40, lat:19.4810, lng:-99.0910, calle:"Calle Oriente 158 #45",        sev:"medio", desc:"Bache lateral peligroso",              fecha:"hace 1 día",    reports:12, colonia:"San Juan de Aragon" },
+  { id:41, lat:19.4755, lng:-99.0860, calle:"Av. Bordo de Xochiaca #88",    sev:"alto",  desc:"Bache doble en curva",                 fecha:"hace 6 horas",  reports:24, colonia:"San Juan de Aragon" },
+  { id:42, lat:19.4830, lng:-99.0940, calle:"Calle Norte 82 #7",            sev:"bajo",  desc:"Hundimiento leve",                    fecha:"hace 5 días",   reports:2,  colonia:"San Juan de Aragon" },
+  // Cuautepec
+  { id:43, lat:19.5280, lng:-99.1350, calle:"Av. Cuautepec #110",           sev:"alto",  desc:"Bache en cuesta pronunciada",          fecha:"hace 2 días",   reports:16, colonia:"Cuautepec" },
+  { id:44, lat:19.5310, lng:-99.1300, calle:"Calle Pirules #23",            sev:"medio", desc:"Bache con piedras sueltas",            fecha:"hace 3 días",   reports:7,  colonia:"Cuautepec" },
+  { id:45, lat:19.5250, lng:-99.1380, calle:"Calle Encinos #56",            sev:"bajo",  desc:"Grieta en bajada",                    fecha:"hace 1 semana", reports:3,  colonia:"Cuautepec" },
+  { id:46, lat:19.5330, lng:-99.1260, calle:"Av. 608 #180",                 sev:"alto",  desc:"Bache muy profundo en curva",          fecha:"hace 1 día",    reports:21, colonia:"Cuautepec" },
+  // Nueva Industrial Vallejo
+  { id:47, lat:19.4650, lng:-99.1280, calle:"Eje 5 Nte. Montevideo #430",  sev:"alto",  desc:"Bache en carril rapido",               fecha:"hace 4 horas",  reports:29, colonia:"Nueva Industrial Vallejo" },
+  { id:48, lat:19.4630, lng:-99.1310, calle:"Av. Gustavo Baz #78",          sev:"medio", desc:"Bache en cruce con semaforo",          fecha:"hace 2 días",   reports:10, colonia:"Nueva Industrial Vallejo" },
+  { id:49, lat:19.4670, lng:-99.1250, calle:"Calle Ferrocarril #201",       sev:"bajo",  desc:"Ondulacion leve",                     fecha:"hace 6 días",   reports:2,  colonia:"Nueva Industrial Vallejo" },
+  // Zacatenco / IPN
+  { id:50, lat:19.5060, lng:-99.1320, calle:"Av. Instituto Politecnico #2580",sev:"alto", desc:"Bache frente a acceso IPN",           fecha:"hace 5 horas",  reports:44, colonia:"Zacatenco" },
+  { id:51, lat:19.5080, lng:-99.1290, calle:"Calle Wilfrido Massieu #10",   sev:"medio", desc:"Bache en bajada, peligroso",           fecha:"hace 1 día",    reports:15, colonia:"Zacatenco" },
+  { id:52, lat:19.5040, lng:-99.1350, calle:"Av. Luis Enrique Erro #3",     sev:"bajo",  desc:"Grieta en banqueta-carril",           fecha:"hace 3 días",   reports:5,  colonia:"Zacatenco" },
+  // Tlalpexco / Eje Central
+  { id:53, lat:19.4600, lng:-99.1350, calle:"Eje Central Lazaro Cardenas #890",sev:"alto",desc:"Bache en carril central METROB",     fecha:"hace 2 horas",  reports:52, colonia:"Tlalpexco" },
+  { id:54, lat:19.4580, lng:-99.1380, calle:"Calle Norte 7 #34",            sev:"medio", desc:"Bache con agua sucia acumulada",       fecha:"hace 3 días",   reports:11, colonia:"Tlalpexco" },
+  // Atzacoalco
+  { id:55, lat:19.5150, lng:-99.1100, calle:"Av. Atzacoalco #230",          sev:"alto",  desc:"Bache profundo en pendiente",          fecha:"hace 6 horas",  reports:18, colonia:"Atzacoalco" },
+  { id:56, lat:19.5120, lng:-99.1130, calle:"Calle El Arbolillo #89",       sev:"medio", desc:"Bache en cruce peatonal",              fecha:"hace 2 días",   reports:8,  colonia:"Atzacoalco" },
+  { id:57, lat:19.5170, lng:-99.1070, calle:"Calle Norte 103 #12",          sev:"bajo",  desc:"Hundimiento superficial",              fecha:"hace 5 días",   reports:3,  colonia:"Atzacoalco" },
+  // Aragon
+  { id:58, lat:19.4710, lng:-99.0980, calle:"Av. 602 #67",                  sev:"alto",  desc:"Bache enorme, parchado mal",           fecha:"hace 1 día",    reports:26, colonia:"Aragon" },
+  { id:59, lat:19.4740, lng:-99.0950, calle:"Calle Oriente 162 #23",        sev:"medio", desc:"Bache en esquina de semaforo",         fecha:"hace 3 días",   reports:9,  colonia:"Aragon" },
+  { id:60, lat:19.4690, lng:-99.1010, calle:"Av. Jardin #145",              sev:"bajo",  desc:"Grieta longitudinal en asfalto",       fecha:"hace 4 días",   reports:4,  colonia:"Aragon" },
+  // Pensil / Nueva Santa Maria
+  { id:61, lat:19.4560, lng:-99.1550, calle:"Av. Marina Nacional #210",     sev:"alto",  desc:"Bache en carril rapido de avenida",    fecha:"hace 3 horas",  reports:36, colonia:"Nueva Santa Maria" },
+  { id:62, lat:19.4540, lng:-99.1520, calle:"Calle Fresno #88",             sev:"medio", desc:"Bache con grietas irradiadas",         fecha:"hace 2 días",   reports:10, colonia:"Nueva Santa Maria" },
+  // Marruecos / Peralvillo
+  { id:63, lat:19.4530, lng:-99.1380, calle:"Av. Peralvillo #450",          sev:"alto",  desc:"Bache profundo en avenida concurrida", fecha:"hace 5 horas",  reports:30, colonia:"Peralvillo" },
+  { id:64, lat:19.4510, lng:-99.1400, calle:"Calle Marruecos #14",          sev:"medio", desc:"Dos baches seguidos",                 fecha:"hace 1 día",    reports:8,  colonia:"Peralvillo" },
+  // Magdalena de las Salinas
+  { id:65, lat:19.4920, lng:-99.1390, calle:"Av. Magdalena de las Salinas #670",sev:"alto",desc:"Bache muy profundo, evitar",        fecha:"hace 4 horas",  reports:23, colonia:"Magdalena de las Salinas" },
+  { id:66, lat:19.4900, lng:-99.1360, calle:"Calle San Bartolo #33",        sev:"medio", desc:"Bache con bordes cortantes",           fecha:"hace 2 días",   reports:7,  colonia:"Magdalena de las Salinas" },
+  { id:67, lat:19.4940, lng:-99.1420, calle:"Calle Norte 88 #22",           sev:"bajo",  desc:"Grieta leve en asfalto",              fecha:"hace 1 semana", reports:2,  colonia:"Magdalena de las Salinas" },
+];
+
+const SEV_COLOR  = { alto: '#E8322F', medio: '#F59E0B', bajo: '#22C55E' };
+const SEV_GLOW   = { alto: 'rgba(232,50,47,0.45)', medio: 'rgba(245,158,11,0.45)', bajo: 'rgba(34,197,94,0.45)' };
+const SEV_RADIUS = { alto: 14, medio: 11, bajo: 8 };
+
+function sevLabel(s){ return s==='alto'?'Alto riesgo':s==='medio'?'Medio':'Bajo'; }
+
+function makeIcon(sev){
+  const c = SEV_COLOR[sev], g = SEV_GLOW[sev], r = SEV_RADIUS[sev];
+  const total = r*2+16;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${total}" height="${total}">
+    <circle cx="${total/2}" cy="${total/2}" r="${r+6}" fill="${g}" opacity="0.5"/>
+    <circle cx="${total/2}" cy="${total/2}" r="${r}" fill="${c}" stroke="rgba(255,255,255,0.9)" stroke-width="2"/>
+    <text x="${total/2}" y="${total/2+4}" text-anchor="middle" font-family="monospace" font-size="11" font-weight="bold" fill="white">!</text>
+  </svg>`;
+  return L.divIcon({ html: svg, iconSize:[total,total], iconAnchor:[total/2,total/2], className:'' });
+}
+
+function makeUserIcon(){
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36">
+    <circle cx="18" cy="18" r="16" fill="rgba(34,120,255,0.15)"/>
+    <circle cx="18" cy="18" r="8" fill="#3B82F6" stroke="white" stroke-width="2.5"/>
+    <circle cx="18" cy="18" r="4" fill="white"/>
+  </svg>`;
+  return L.divIcon({ html: svg, iconSize:[36,36], iconAnchor:[18,18], className:'' });
+}
+
+function popupHtml(b){
+  const cls = `sev-${b.sev}`;
+  return `<div class="bache-popup">
+    <div class="bp-title">Bache reportado · ${b.colonia || ''}</div>
+    <div class="bp-street">${b.calle}</div>
+    <span class="bp-sev ${cls}">${sevLabel(b.sev)}</span>
+    <div class="bp-desc">${b.desc}</div>
+    <div class="bp-meta">Reportado ${b.fecha} · ${b.reports} reportes</div>
+  </div>`;
+}
+
+function haversine(lat1,lng1,lat2,lng2){
+  const R=6371000, dLat=(lat2-lat1)*Math.PI/180, dLng=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function allBaches(){ return [...baches, ...userBaches]; }
+
+let map, userMarker, userPos=null;
+let activeSev={ alto:true, medio:true, bajo:true };
+let markers=[], userBaches=[];
+
+function renderMarkers(){
+  markers.forEach(m=>map.removeLayer(m)); markers=[];
+  let visible=0;
+  allBaches().forEach(b=>{
+    if(!activeSev[b.sev]) return;
+    visible++;
+    const m=L.marker([b.lat,b.lng],{icon:makeIcon(b.sev)}).bindPopup(popupHtml(b),{maxWidth:230});
+    m.addTo(map); markers.push(m);
+  });
+  document.getElementById('s-total').textContent=visible;
+}
+
+function checkProximity(){
+  if(!userPos) return;
+  const [ulat,ulng]=userPos;
+  let min=Infinity, nearest=null;
+  allBaches().forEach(b=>{
+    if(!activeSev[b.sev]) return;
+    const d=haversine(ulat,ulng,b.lat,b.lng);
+    if(d<min){min=d;nearest=b;}
+  });
+  if(nearest){
+    const dm=Math.round(min);
+    document.getElementById('s-cercano').textContent=dm<1000?dm+'m':(dm/1000).toFixed(1)+'km';
+    const bar=document.getElementById('alerta-bar');
+    if(min<200){
+      bar.style.display='flex';
+      document.getElementById('alerta-texto').textContent=`¡Bache ${nearest.sev==='alto'?'peligroso':'reportado'} a ${dm}m! — ${nearest.calle}`;
+    } else { bar.style.display='none'; }
+  }
+}
+
+window.addEventListener('load',()=>{
+  map=L.map('map',{zoomControl:true, maxBounds:BOUNDS, minZoom:12, maxZoom:18}).setView(CENTER,14);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://carto.com/">CARTO</a>'
+  }).addTo(map);
+
+  const b=L.latLngBounds([[19.430,-99.160],[19.540,-99.060]]);
+  L.rectangle(b,{color:'#3B82F6',weight:1.5,fillOpacity:0.04,dashArray:'5 5'}).addTo(map);
+
+  renderMarkers();
+
+  if(navigator.geolocation){
+    navigator.geolocation.watchPosition(pos=>{
+      const {latitude:lat,longitude:lng}=pos.coords;
+      userPos=[lat,lng];
+      document.getElementById('pos-label').textContent=`${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      if(!userMarker){ userMarker=L.marker([lat,lng],{icon:makeUserIcon(),zIndexOffset:1000}).addTo(map); map.setView([lat,lng],16); }
+      else { userMarker.setLatLng([lat,lng]); }
+      checkProximity();
+    },()=>{
+      document.getElementById('pos-label').textContent='Ubicación no disponible';
+      userPos=[19.4850,-99.1135];
+      userMarker=L.marker(userPos,{icon:makeUserIcon(),zIndexOffset:1000}).addTo(map);
+      checkProximity();
+    },{enableHighAccuracy:true,maximumAge:5000});
+  } else {
+    userPos=CENTER;
+    userMarker=L.marker(CENTER,{icon:makeUserIcon(),zIndexOffset:1000}).addTo(map);
+    document.getElementById('pos-label').textContent='GPS no disponible';
+    checkProximity();
+  }
+
+  document.querySelectorAll('.filtro-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const s=btn.dataset.sev;
+      activeSev[s]=!activeSev[s];
+      btn.classList.toggle('on',activeSev[s]);
+      renderMarkers(); checkProximity();
+    });
+  });
+
+  let navMode=false;
+  document.getElementById('modo-btn').addEventListener('click',()=>{
+    navMode=!navMode;
+    const b=document.getElementById('modo-btn');
+    b.textContent=navMode?'Navegando...':'Navegación';
+    b.classList.toggle('activo',navMode);
+    if(navMode&&userPos) map.setView(userPos,17);
+  });
+
+  document.getElementById('btn-reportar').addEventListener('click',()=>{
+    document.getElementById('modal-reporte').style.display='flex';
+  });
+  document.getElementById('btn-cancel-modal').addEventListener('click',()=>{
+    document.getElementById('modal-reporte').style.display='none';
+  });
+  document.getElementById('btn-enviar-reporte').addEventListener('click',()=>{
+    const calle=document.getElementById('r-calle').value.trim()||'Calle sin nombre';
+    const sev=document.getElementById('r-sev').value;
+    const desc=document.getElementById('r-desc').value.trim()||'Sin descripción';
+    const [lat,lng]=userPos||CENTER;
+    const nb={id:Date.now(),lat:lat+(Math.random()-.5)*.002,lng:lng+(Math.random()-.5)*.002,calle,sev,desc,fecha:'hace un momento',reports:1};
+    userBaches.push(nb); renderMarkers(); checkProximity();
+    document.getElementById('modal-reporte').style.display='none';
+    document.getElementById('r-calle').value='';
+    document.getElementById('r-desc').value='';
+    const bar=document.getElementById('alerta-bar');
+    bar.style.display='flex';
+    document.getElementById('alerta-texto').textContent=`Nuevo bache registrado en ${calle} — ¡Gracias por reportar!`;
+    setTimeout(()=>{ bar.style.display='none'; },4000);
+  });
+});
+</script>
+
+</body>
+</html>
